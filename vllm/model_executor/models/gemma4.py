@@ -1317,7 +1317,7 @@ class Gemma4Model(nn.Module, EagleModelMixin):
             assert intermediate_tensors is not None
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
-            per_layer_inputs = intermediate_tensors.get("per_layer_inputs")
+            per_layer_inputs = intermediate_tensors.tensors.get("per_layer_inputs")
 
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
         for layer_idx, layer in enumerate(
@@ -1342,13 +1342,16 @@ class Gemma4Model(nn.Module, EagleModelMixin):
                 aux_hidden_states, layer_idx + 1, hidden_states, residual
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {
-                    "hidden_states": hidden_states,
-                    "residual": residual,
-                    "per_layer_inputs": per_layer_inputs,
-                }
-            )
+            tensor_dict = {"hidden_states": hidden_states}
+            
+            for name, tensor in {
+                "residual": residual,
+                "per_layer_inputs": per_layer_inputs,
+            }.items():
+                if tensor is not None:
+                    tensor_dict[name] = tensor
+            
+            return IntermediateTensors(tensor_dict)
         # Gemma4 incorporates residual into hidden_states directly
         # Apply norm without residual fusion when possible.
         if residual is None:
